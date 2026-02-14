@@ -60,7 +60,8 @@ func ParseOuterHeaderCreation(payload []byte) (*OuterHeaderCreationFields, error
 		if l < offset+4 {
 			return nil, fmt.Errorf("OuterHeaderCreation: insufficient bytes for IPv4 at offset %d", offset)
 		}
-		f.IPv4Address = net.IP(payload[offset : offset+4]).To4()
+		f.IPv4Address = make(net.IP, 4)
+		copy(f.IPv4Address, payload[offset:offset+4])
 		offset += 4
 	}
 
@@ -69,7 +70,8 @@ func ParseOuterHeaderCreation(payload []byte) (*OuterHeaderCreationFields, error
 		if l < offset+16 {
 			return nil, fmt.Errorf("OuterHeaderCreation: insufficient bytes for IPv6 at offset %d", offset)
 		}
-		f.IPv6Address = net.IP(payload[offset : offset+16]).To16()
+		f.IPv6Address = make(net.IP, 16)
+		copy(f.IPv6Address, payload[offset:offset+16])
 		offset += 16
 	}
 
