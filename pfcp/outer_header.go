@@ -1,15 +1,17 @@
 package pfcp
 
 import (
+	"errors"
 	"fmt"
 	"net"
-
-	"github.com/pkg/errors"
 )
 
-// OuterHeaderCreationFields represents parsed Outer Header Creation IE fields
-// This is a local implementation to work around go-pfcp library bug
-// where Uint32 is incorrectly used to read 3-byte C-TAG/S-TAG fields
+// OuterHeaderCreationFields represents parsed Outer Header Creation IE fields.
+// This local implementation explicitly handles 3-byte C-TAG/S-TAG fields
+// as defined for the Outer Header Creation IE in 3GPP TS 29.244, Figure 8.2.56-1.
+//
+// The go-pfcp library (github.com/wmnsk/go-pfcp) incorrectly uses Uint32 (4 bytes)
+// to read 3-byte C-TAG/S-TAG fields, causing payload misalignment.
 type OuterHeaderCreationFields struct {
 	OuterHeaderCreationDescription uint16
 	TEID                           uint32
@@ -20,8 +22,16 @@ type OuterHeaderCreationFields struct {
 	STag                           uint32
 }
 
-// ParseOuterHeaderCreation parses OuterHeaderCreation IE payload according to 3GPP TS 29.244
-// This implementation correctly handles 3-byte C-TAG/S-TAG fields
+// Bit flags in Octet 5 (payload[0]) determine which fields are present:
+//
+//	Bit 1 (0x01): GTP-U/UDP/IPv4  → TEID + IPv4
+//	Bit 2 (0x02): GTP-U/UDP/IPv6  → TEID + IPv6
+//	Bit 3 (0x04): UDP/IPv4        → IPv4 + Port
+//	Bit 4 (0x08): UDP/IPv6        → IPv6 + Port
+//	Bit 5 (0x10): IPv4            → IPv4
+//	Bit 6 (0x20): IPv6            → IPv6
+//	Bit 7 (0x40): C-TAG           → 3-octet C-TAG
+//	Bit 8 (0x80): S-TAG           → 3-octet S-TAG
 func ParseOuterHeaderCreation(payload []byte) (*OuterHeaderCreationFields, error) {
 	l := len(payload)
 	if l < 2 {
@@ -32,7 +42,7 @@ func ParseOuterHeaderCreation(payload []byte) (*OuterHeaderCreationFields, error
 	f.OuterHeaderCreationDescription = uint16(payload[0])<<8 | uint16(payload[1])
 	offset := 2
 
-	// oct5 is the first byte containing bit flags (same as go-pfcp)
+	// oct5 is the first byte containing bit flags
 	oct5 := payload[0]
 
 	// TEID: present if bit 1 (0x01) or bit 2 (0x02) is set
@@ -73,23 +83,19 @@ func ParseOuterHeaderCreation(payload []byte) (*OuterHeaderCreationFields, error
 	}
 
 	// C-TAG: present if bit 7 (0x40) is set
-	// Per 3GPP TS 29.244, C-TAG is 3 octets (not 4!)
 	if (oct5 & 0x40) != 0 {
 		if l < offset+3 {
 			return nil, fmt.Errorf("OuterHeaderCreation: insufficient bytes for C-TAG at offset %d", offset)
 		}
-		// Correctly read 3 bytes into uint32
 		f.CTag = uint32(payload[offset])<<16 | uint32(payload[offset+1])<<8 | uint32(payload[offset+2])
 		offset += 3
 	}
 
 	// S-TAG: present if bit 8 (0x80) is set
-	// Per 3GPP TS 29.244, S-TAG is 3 octets (not 4!)
 	if (oct5 & 0x80) != 0 {
 		if l < offset+3 {
 			return nil, fmt.Errorf("OuterHeaderCreation: insufficient bytes for S-TAG at offset %d", offset)
 		}
-		// Correctly read 3 bytes into uint32
 		f.STag = uint32(payload[offset])<<16 | uint32(payload[offset+1])<<8 | uint32(payload[offset+2])
 		offset += 3
 	}
