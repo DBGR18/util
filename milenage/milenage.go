@@ -143,24 +143,6 @@ func CutAUTN(autn []byte) ([]byte, []byte, []byte) {
  * @ak: AK = 48-bit anonymity key (f5)
  * @akstar: AK = 48-bit anonymity key (f5*)
  */
-// F2345 - Public wrapper for Milenage f2, f3, f4, f5, f5* algorithms
-// Returns RES, CK, IK, AK (f5), and AK* (f5*)
-func F2345(opc, k, rand []byte) (res, ck, ik, ak, akstar []byte, err error) {
-	err = validateArg(opc, "OPc", OPC_LEN)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	err = validateArg(k, "K", K_LEN)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	err = validateArg(rand, "RAND", RAND_LEN)
-	if err != nil {
-		return nil, nil, nil, nil, nil, err
-	}
-	return f2345(opc, k, rand)
-}
-
 func f2345(opc, k, _rand []uint8) (res, ck, ik, ak, akstar []byte, err error) {
 	res = make([]byte, RES_LEN)
 	ck, ik = make([]byte, CK_LEN), make([]byte, IK_LEN)
@@ -390,43 +372,43 @@ func (m *MACFailureError) Error() string {
 // The AMF used to calculate MAC-S assumes a dummy value of all zeros
 var resynchAMF = []byte{0x00, 0x00}
 
-func validateAUTS(opc, k, rand, auts []byte) (sqnms []byte, akstar []byte, err error) {
+func validateAUTS(opc, k, rand, auts []byte) (sqnms []byte, err error) {
 	ConcSQNms, MACS := CutAUTS(auts)
 	// nolint:dogsled
 	_, _, _, _, AKstar, err := f2345(opc, k, rand)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "calculate F2345 Fail")
+		return nil, errors.Wrap(err, "calculate F2345 Fail")
 	}
 	SQNms := xor(ConcSQNms, AKstar)
 
 	_, XMACS, err := f1(opc, k, rand, SQNms, resynchAMF)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "calculate F1 Fail")
+		return nil, errors.Wrap(err, "calculate F1 Fail")
 	}
 
 	if !reflect.DeepEqual(XMACS, MACS) {
-		return nil, nil, &MACFailureError{MACName: "MAC-S", ExpectedMAC: XMACS, ExactMAC: MACS}
+		return nil, &MACFailureError{MACName: "MAC-S", ExpectedMAC: XMACS, ExactMAC: MACS}
 	}
 
-	return SQNms, AKstar, nil
+	return SQNms, nil
 }
 
-func ValidateAUTS(opc, k, rand, auts []byte) (sqnms []byte, akstar []byte, err error) {
+func ValidateAUTS(opc, k, rand, auts []byte) (sqnms []byte, err error) {
 	err = validateArg(opc, "OPc", OPC_LEN)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	err = validateArg(k, "K", K_LEN)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	err = validateArg(rand, "RAND", RAND_LEN)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	err = validateArg(auts, "AUTS", AUTS_LEN)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	return validateAUTS(opc, k, rand, auts)
